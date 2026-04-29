@@ -221,7 +221,9 @@ enum EnrichResult {
 }
 
 async fn enrich_one(client: &EnrichClient, raw: &Swap) -> Result<EnrichResult> {
-    // Match the WS commitment so we don't query for state that hasn't landed.
+    // getTransaction requires `confirmed` or `finalized` (Solana RPC spec — no
+    // `processed` support; gives -32602 Invalid params). The null-result retry
+    // loop above handles the case where the tx hasn't landed at confirmed yet.
     let body = serde_json::json!({
         "jsonrpc": "2.0",
         "id": 1,
@@ -229,7 +231,7 @@ async fn enrich_one(client: &EnrichClient, raw: &Swap) -> Result<EnrichResult> {
         "params": [raw.signature, {
             "encoding": "jsonParsed",
             "maxSupportedTransactionVersion": 0,
-            "commitment": "processed"
+            "commitment": "confirmed"
         }]
     });
     let resp = client
@@ -402,7 +404,7 @@ mod tests {
                 "params": ["ok_sig", {
                     "encoding": "jsonParsed",
                     "maxSupportedTransactionVersion": 0,
-                    "commitment": "processed"
+                    "commitment": "confirmed"
                 }]
             })))
             .respond_with(ResponseTemplate::new(200).set_body_json(body))
