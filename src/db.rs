@@ -8,6 +8,7 @@ use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 
 use crate::detector::Sandwich;
+use crate::pyth::SolUsdPrice;
 
 const BATCH_INTERVAL_MS: u64 = 500;
 const BATCH_MAX: usize = 64;
@@ -25,7 +26,11 @@ pub async fn connect(db_url: &str) -> Result<PgPool> {
 
 /// Batched writer task. Collects sandwiches from `rx`, flushes every BATCH_INTERVAL_MS
 /// or every BATCH_MAX events, whichever comes first. Idempotent via ON CONFLICT.
-pub async fn run(pool: PgPool, mut rx: mpsc::Receiver<Sandwich>) -> Result<()> {
+pub async fn run(
+    pool: PgPool,
+    sol_price: SolUsdPrice,
+    mut rx: mpsc::Receiver<Sandwich>,
+) -> Result<()> {
     let mut batch: Vec<Sandwich> = Vec::with_capacity(BATCH_MAX);
     let mut tick = interval(Duration::from_millis(BATCH_INTERVAL_MS));
     tick.tick().await; // skip immediate first tick
@@ -38,11 +43,11 @@ pub async fn run(pool: PgPool, mut rx: mpsc::Receiver<Sandwich>) -> Result<()> {
                     Some(s) => {
                         batch.push(s);
                         if batch.len() >= BATCH_MAX {
-                            flush(&pool, &mut batch).await;
+                            flush(&pool, &sol_price, &mut batch).await;
                         }
                     }
                     None => {
-                        flush(&pool, &mut batch).await;
+                        flush(&pool, &sol_price, &mut batch).await;
                         info!("db writer: input channel closed, exiting");
                         return Ok(());
                     }
@@ -50,21 +55,22 @@ pub async fn run(pool: PgPool, mut rx: mpsc::Receiver<Sandwich>) -> Result<()> {
             }
             _ = tick.tick() => {
                 if !batch.is_empty() {
-                    flush(&pool, &mut batch).await;
+                    flush(&pool, &sol_price, &mut batch).await;
                 }
             }
         }
     }
 }
 
-async fn flush(pool: &PgPool, batch: &mut Vec<Sandwich>) {
+async fn flush(pool: &PgPool, sol_price: &SolUsdPrice, batch: &mut Vec<Sandwich>) {
     if batch.is_empty() {
         return;
     }
     let drained = std::mem::take(batch);
     let count = drained.len();
+    let spot = sol_price.get();
 
-    match write_batch(pool, &drained).await {
+    match write_batch(pool, spot.as_ref(), &drained).await {
         Ok(written) => {
             debug!(received = count, written, "flush ok");
         }
@@ -74,7 +80,11 @@ async fn flush(pool: &PgPool, batch: &mut Vec<Sandwich>) {
     }
 }
 
-async fn write_batch(pool: &PgPool, batch: &[Sandwich]) -> Result<usize> {
+async fn write_batch(
+    pool: &PgPool,
+    sol_usd: Option<&Decimal>,
+    batch: &[Sandwich],
+) -> Result<usize> {
     let mut tx = pool.begin().await.context("begin tx")?;
     let mut written = 0_usize;
 
@@ -104,11 +114,15 @@ async fn write_batch(pool: &PgPool, batch: &[Sandwich]) -> Result<usize> {
         }
 
         let profit_lamports = s.profit_lamports.and_then(|p| i64::try_from(p).ok());
-        let profit_sol = s.profit_lamports.map(|p| {
-            // 1 SOL = 1e9 lamports; use Decimal for safe scaling
-            let lamports = Decimal::from(p as i64);
-            lamports / Decimal::from(1_000_000_000_i64)
+        let profit_sol = s.profit_lamports.and_then(|p| {
+            i64::try_from(p)
+                .ok()
+                .map(|p64| Decimal::from(p64) / Decimal::from(1_000_000_000_i64))
         });
+        let profit_usd = match (profit_sol.as_ref(), sol_usd) {
+            (Some(sol), Some(usd)) => Some(sol * usd),
+            _ => None,
+        };
 
         let result = sqlx::query(
             r#"
@@ -118,8 +132,8 @@ async fn write_batch(pool: &PgPool, batch: &[Sandwich]) -> Result<usize> {
                 pool, dex, slot_span,
                 profit_lamports, profit_sol, profit_usd,
                 confidence
-            ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,null,$11)
-            on conflict (front_sig, back_sig) do nothing
+            ) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+            on conflict (front_sig, victim_sig, back_sig) do nothing
             "#,
         )
         .bind(&s.victim.signature)
@@ -132,6 +146,7 @@ async fn write_batch(pool: &PgPool, batch: &[Sandwich]) -> Result<usize> {
         .bind(s.slot_span)
         .bind(profit_lamports)
         .bind(profit_sol)
+        .bind(profit_usd)
         .bind(s.confidence as i16)
         .execute(&mut *tx)
         .await

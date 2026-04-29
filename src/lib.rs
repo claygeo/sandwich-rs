@@ -3,5 +3,7 @@ pub mod db;
 pub mod detector;
 pub mod http;
 pub mod parser;
+pub mod pyth;
+pub mod slot_resume;
 pub mod telegram;
 pub mod ws;

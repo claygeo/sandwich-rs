@@ -201,6 +201,7 @@ async fn detect_one(row: &Row) -> Result<Option<Sandwich>> {
             pool: row.pool.clone(),
             dex: "raydium-v4".into(),
             fee_lamports: 0,
+            jito_tip_lamports: 0,
             deltas: vec![
                 delta(WSOL_MINT, front_wsol),
                 delta(&token_mint, 500_000),
@@ -216,6 +217,7 @@ async fn detect_one(row: &Row) -> Result<Option<Sandwich>> {
             pool: row.pool.clone(),
             dex: "raydium-v4".into(),
             fee_lamports: 0,
+            jito_tip_lamports: 0,
             deltas: vec![
                 delta(WSOL_MINT, -2_000_000_000),
                 delta(&token_mint, 800_000),
@@ -231,6 +233,7 @@ async fn detect_one(row: &Row) -> Result<Option<Sandwich>> {
             pool: row.pool.clone(),
             dex: "raydium-v4".into(),
             fee_lamports: 0,
+            jito_tip_lamports: 0,
             deltas: vec![
                 delta(WSOL_MINT, back_wsol),
                 delta(&token_mint, -500_000),

@@ -196,14 +196,16 @@ fn signer_delta_for_other_mint(swap: &Swap) -> Option<(String, i128)> {
         .map(|d| (d.mint.clone(), d.delta))
 }
 
-/// Profit on attacker's WSOL across the bracket, net of network + priority fees.
-/// Codex flagged: ignoring fees means a real $5 sandwich with $0.50 of fees reads as a
-/// $30 *loss* once Solana priority fees + Jito tips are accounted for.
+/// Profit on attacker's WSOL across the bracket, net of network + priority fees AND
+/// Jito tips (parsed by the parser from the same transaction's inner instructions).
+/// Codex flagged: ignoring these means a real $5 sandwich with $0.50 of fees and a
+/// $0.20 Jito tip reads as a meaningful loss instead of a small win.
 fn compute_profit_lamports(front: &Swap, back: &Swap) -> Option<i128> {
     let f = signer_delta_for_mint(front, WSOL_MINT)?;
     let b = signer_delta_for_mint(back, WSOL_MINT)?;
     let fees = front.fee_lamports as i128 + back.fee_lamports as i128;
-    Some(f + b - fees)
+    let tips = front.jito_tip_lamports as i128 + back.jito_tip_lamports as i128;
+    Some(f + b - fees - tips)
 }
 
 #[cfg(test)]
@@ -219,6 +221,7 @@ mod tests {
             pool: pool.into(),
             dex: "raydium-v4".into(),
             fee_lamports: 0,
+            jito_tip_lamports: 0,
             deltas,
             raw_logs: vec![],
         }

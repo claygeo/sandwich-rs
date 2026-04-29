@@ -19,6 +19,10 @@ path = "src/main.rs"
 name = "backtest"
 path = "src/bin/backtest.rs"
 
+[[bin]]
+name = "scrape-fixtures"
+path = "src/bin/scrape-fixtures.rs"
+
 [dependencies]
 # Async runtime + WS + HTTP
 tokio = { version = "1", features = ["full"] }
@@ -68,6 +72,7 @@ csv = "1"
 [dev-dependencies]
 proptest = "1"
 tokio-test = "0.4"
+tempfile = "3"
 
 [profile.release]
 lto = "thin"

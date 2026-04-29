@@ -10,7 +10,7 @@ use tokio::sync::{broadcast, mpsc};
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{info, warn};
 
-use sandwich_rs::{config, db, detector, http, parser, telegram, ws};
+use sandwich_rs::{config, db, detector, http, parser, pyth, slot_resume, telegram, ws};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -48,6 +48,26 @@ async fn main() -> Result<()> {
     let dropped_alert = Arc::new(AtomicU64::new(0));
     let dropped_broadcast = Arc::new(AtomicU64::new(0));
 
+    // Slot resume marker (operational visibility into outage gaps).
+    let slot_marker = Arc::new(slot_resume::SlotMarker::load_or_default(&cfg.state_dir).await);
+    {
+        let m = slot_marker.clone();
+        tokio::spawn(async move { m.persist_loop().await });
+    }
+
+    // Pyth SOL/USD spot for filling sandwich_attempts.profit_usd.
+    let sol_price = pyth::SolUsdPrice::new();
+    if cfg.enable_pyth {
+        let sp = sol_price.clone();
+        tokio::spawn(async move {
+            if let Err(e) = sp.run_poller().await {
+                warn!(err = ?e, "pyth poller exited");
+            }
+        });
+    } else {
+        info!("pyth poller disabled (SANDWICH_PYTH=off)");
+    }
+
     // WS reader → stamper → raw_tx
     // The stamper updates `last_ws_frame` so /healthz can reason about freshness.
     let h_ws = {
@@ -68,7 +88,21 @@ async fn main() -> Result<()> {
         })
     };
 
-    let h_parser = tokio::spawn(parser::run(raw_rx, swap_tx));
+    let h_parser = {
+        let slot_marker = slot_marker.clone();
+        // Tee swap_rx through a slot-recording task so the persister sees latest slot.
+        let (parsed_swap_tx, parsed_swap_rx) = mpsc::channel::<parser::Swap>(512);
+        tokio::spawn(async move {
+            let mut rx = parsed_swap_rx;
+            while let Some(swap) = rx.recv().await {
+                slot_marker.record(swap.slot);
+                if swap_tx.send(swap).await.is_err() {
+                    break;
+                }
+            }
+        });
+        tokio::spawn(parser::run(raw_rx, parsed_swap_tx))
+    };
     let h_detector = tokio::spawn(detector::run(pool_state, swap_rx, sandwich_tx));
 
     // Fanout: detector → (db, telegram, broadcast).
@@ -125,7 +159,7 @@ async fn main() -> Result<()> {
                     cfg.http_bind.clone(),
                     started_at_epoch,
                 );
-                tokio::spawn(db::run(pool, db_rx))
+                tokio::spawn(db::run(pool, sol_price.clone(), db_rx))
             }
             Err(e) => {
                 warn!(err = ?e, "db connect failed — running without persistence");

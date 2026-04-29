@@ -14,26 +14,31 @@ The WebSocket reader does *only* I/O. Parsing happens on a separate task with bo
 
 ## What ships in v1
 
-- Subscribes to **Raydium AMM v4** on Solana mainnet. (Jupiter v6 / Orca / Meteora come in v1.5.)
+- Subscribes to **Raydium AMM v4** + **Orca Whirlpool** on Solana mainnet via Helius `transactionSubscribe` (with public mainnet `logsSubscribe` fallback when no Helius key).
+- IDL-correct pool extraction for both DEXes — walks outer + inner instructions, identifies the program, takes the AMM account at the IDL-specified index. Falls back to a heuristic only if no recognizable swap instruction is found.
 - Detection algorithm:
   - Walk the per-pool ring buffer for a prior swap by the same signer.
   - Confirm a different-signer swap sits between front and back, in the same pool.
   - `slot(back) - slot(front)` must be ≤ 3.
-  - Score confidence: 50 base + 20 (opposite WSOL signs on attacker) + 10 (victim shares non-WSOL mint, same direction as front) + 10 (positive aggregate profit).
-- Profit estimate (when Helius enhanced-tx is available): `signed_sum(attacker.WSOL deltas across front + back)`.
-- Idempotent persistence: `ON CONFLICT (signature) DO NOTHING` on `transactions`, `ON CONFLICT (front_sig, back_sig) DO NOTHING` on `sandwich_attempts`. Restart-safe.
+  - Multi-victim brackets emit one row per victim (`unique(front_sig, victim_sig, back_sig)`).
+  - Confidence scoring: 50 base + 20 (opposite WSOL signs on attacker) + 10 (victim shares non-WSOL mint, same direction as front) + 10 (positive aggregate profit).
+- **Profit calc** (when Helius enhanced-tx available): `Σ(attacker WSOL Δ across front + back) - Σ(network+priority fees) - Σ(Jito tips)`. Jito tips are detected by scanning inner instructions for System Program transfers to any of the 8 known Jito tip accounts.
+- **USD profit** filled from a Pyth/Hermes SOL/USD poller (30s refresh, lock-free read on the writer hot path).
+- **Slot-resume marker** persisted to `/var/lib/sandwich-rs/last_slot` every 30s — operational visibility on outage gaps.
+- Idempotent persistence: `ON CONFLICT (signature) DO NOTHING` on `transactions`, `ON CONFLICT (front_sig, victim_sig, back_sig) DO NOTHING` on `sandwich_attempts`. Restart-safe.
 - HTTP endpoints on `:8080`:
-  - `GET /healthz` — 200 if last WS frame within 60s, 503 otherwise.
+  - `GET /healthz` — 200 if last WS frame within 60s OR within 30s startup grace, 503 otherwise.
   - `GET /events` — Server-Sent Events; replays the most recent 50 sandwiches then streams new ones.
   - `GET /stats` — singleton 24h aggregate (count, profit_sol, profit_usd, unique attackers, unique victim pools, delta vs prior 24h).
+- `cargo run --bin scrape-fixtures fixtures/seed.csv fixtures/known-sandwiches.csv` — turns a hand-curated list of `victim_sig,front_sig,back_sig` triples into a fully-populated backtest CSV by calling Helius `getTransaction` for each leg.
 
 ## What's deferred
 
-- USD profit (needs Pyth/Birdeye spot). v1.5.
-- Jupiter v6, Orca Whirlpool, Meteora subscriptions. v1.5.
-- US-east region migration (Hetzner EU adds ~120ms RTT to Helius). v1.5 once precision is proven.
-- Auto-scrape ground-truth from Sandwiched.wtf. v2.
-- Public dashboard frontend. v2 once detector precision is verified.
+- Jupiter v6 aggregator coverage (multi-hop routing makes pool identification harder). v1.6.
+- Meteora DLMM + standard pool subscriptions. v1.6.
+- US-east region migration (Hetzner EU adds ~120ms RTT to Helius). When precision is proven on EU, migrate.
+- Auto-scrape ground-truth from Sandwiched.wtf (currently `scrape-fixtures` requires hand-curated victim/front/back triples). v2.
+- Public dashboard frontend. Built in this repo at `frontend/` (Vite + React + TS); operator deploys to Netlify.
 
 ## Run locally
 
