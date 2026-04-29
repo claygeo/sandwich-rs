@@ -10,7 +10,7 @@ use tokio::sync::{broadcast, mpsc};
 use tokio_tungstenite::tungstenite::Message;
 use tracing::{info, warn};
 
-use sandwich_rs::{config, db, detector, http, parser, pyth, slot_resume, telegram, ws};
+use sandwich_rs::{config, db, detector, enricher, http, parser, pyth, slot_resume, telegram, ws};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -34,7 +34,12 @@ async fn main() -> Result<()> {
     );
 
     // Pipeline channels (bounded — backpressure on the WS reader).
+    //   ws_reader -> raw -> parser -> swap_raw -> enricher -> swap -> detector -> sandwich -> fanout
+    // Enricher sits between parser and detector. It's a no-op when WS gave us
+    // already-parsed Atlas data; it does a getTransaction RPC followup when WS
+    // only gave us logs (the free-tier path).
     let (raw_tx, raw_rx) = mpsc::channel::<Message>(1024);
+    let (swap_raw_tx, swap_raw_rx) = mpsc::channel::<parser::Swap>(512);
     let (swap_tx, swap_rx) = mpsc::channel::<parser::Swap>(512);
     let (sandwich_tx, sandwich_rx) = mpsc::channel::<detector::Sandwich>(64);
     let (db_tx, db_rx) = mpsc::channel::<detector::Sandwich>(64);
@@ -88,21 +93,56 @@ async fn main() -> Result<()> {
         })
     };
 
+    // Codex #4: tee uses try_send so a slow enricher never blocks the parser
+    // (and through it, the WS reader). On full, count + drop.
+    let enrich_metrics = Arc::new(enricher::EnrichMetrics::default());
     let h_parser = {
         let slot_marker = slot_marker.clone();
-        // Tee swap_rx through a slot-recording task so the persister sees latest slot.
+        let dropped = enrich_metrics.input_dropped.clone();
+        // Tee parser output through a slot-recording task that forwards to enricher.
         let (parsed_swap_tx, parsed_swap_rx) = mpsc::channel::<parser::Swap>(512);
         tokio::spawn(async move {
             let mut rx = parsed_swap_rx;
             while let Some(swap) = rx.recv().await {
                 slot_marker.record(swap.slot);
-                if swap_tx.send(swap).await.is_err() {
-                    break;
+                match swap_raw_tx.try_send(swap) {
+                    Ok(()) => {}
+                    Err(tokio::sync::mpsc::error::TrySendError::Full(s)) => {
+                        let n = dropped.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+                        warn!(sig = %s.signature, dropped_input_total = n, "enricher input full — dropping (parser stays unblocked)");
+                    }
+                    Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => break,
                 }
             }
         });
         tokio::spawn(parser::run(raw_rx, parsed_swap_tx))
     };
+    let h_enricher = enricher::run_with_metrics(
+        cfg.rpc_url.clone(),
+        enrich_metrics.clone(),
+        swap_raw_rx,
+        swap_tx,
+    );
+
+    // Background metrics reporter — every 60s log enricher counters so journalctl
+    // shows what we're losing and why (per codex's "without counters you'll be flying blind").
+    {
+        let m = enrich_metrics.clone();
+        tokio::spawn(async move {
+            let mut tick = tokio::time::interval(Duration::from_secs(60));
+            tick.tick().await;
+            loop {
+                tick.tick().await;
+                let inp = m.input_dropped.load(std::sync::atomic::Ordering::Relaxed);
+                let q = m.quota_dropped.load(std::sync::atomic::Ordering::Relaxed);
+                let r4 = m.rate_limit_429.load(std::sync::atomic::Ordering::Relaxed);
+                let nr = m.null_retries.load(std::sync::atomic::Ordering::Relaxed);
+                let dr = m.dropped_after_retry.load(std::sync::atomic::Ordering::Relaxed);
+                let ok = m.enriched_ok.load(std::sync::atomic::Ordering::Relaxed);
+                info!(enriched_ok=ok, input_dropped=inp, quota_dropped=q, rate_limit_429=r4, null_retries=nr, dropped_after_retry=dr, "enricher metrics");
+            }
+        });
+    }
     let h_detector = tokio::spawn(detector::run(pool_state, swap_rx, sandwich_tx));
 
     // Fanout: detector → (db, telegram, broadcast).
@@ -192,6 +232,7 @@ async fn main() -> Result<()> {
     tokio::select! {
         r = h_ws       => warn!(?r, "ws task exited"),
         r = h_parser   => warn!(?r, "parser task exited"),
+        r = h_enricher => warn!(?r, "enricher task exited"),
         r = h_detector => warn!(?r, "detector task exited"),
         r = h_fanout   => warn!(?r, "fanout task exited"),
         r = h_db       => warn!(?r, "db task exited"),

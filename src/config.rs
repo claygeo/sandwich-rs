@@ -10,6 +10,9 @@ pub struct Config {
     pub http_bind: String,
     pub state_dir: PathBuf,
     pub enable_pyth: bool,
+    /// HTTPS RPC URL used by the enricher (getTransaction followups). Built from
+    /// HELIUS_API_KEY when set, falls back to public mainnet.
+    pub rpc_url: String,
     pub telegram_bot_token: Option<String>,
     pub telegram_chat_id: Option<String>,
 }
@@ -63,6 +66,13 @@ impl Config {
             .map(|v| v.to_lowercase() != "off" && v != "0")
             .unwrap_or(true);
 
+        let rpc_url = env::var("SANDWICH_RPC_URL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| {
+            match env::var("HELIUS_API_KEY").ok().filter(|s| !s.is_empty()) {
+                Some(k) => format!("https://mainnet.helius-rpc.com/?api-key={k}"),
+                None => "https://api.mainnet-beta.solana.com".into(),
+            }
+        });
+
         Ok(Self {
             ws_url,
             use_helius,
@@ -71,6 +81,7 @@ impl Config {
             http_bind,
             state_dir,
             enable_pyth,
+            rpc_url,
             telegram_bot_token: env::var("TELEGRAM_BOT_TOKEN").ok().filter(|s| !s.is_empty()),
             telegram_chat_id: env::var("TELEGRAM_CHAT_ID").ok().filter(|s| !s.is_empty()),
         })

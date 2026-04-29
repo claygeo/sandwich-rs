@@ -14,13 +14,23 @@ const BATCH_INTERVAL_MS: u64 = 500;
 const BATCH_MAX: usize = 64;
 
 pub async fn connect(db_url: &str) -> Result<PgPool> {
+    // Supavisor (Supabase pooler) in transaction mode rotates connections behind
+    // sqlx's prepared-statement cache, which leads to "prepared statement
+    // sqlx_s_NN already exists" errors after a few hundred queries. Disabling the
+    // cache forces sqlx to re-prepare per query — a touch more wire work but
+    // pooler-safe.
+    use std::str::FromStr;
+    let mut opts = sqlx::postgres::PgConnectOptions::from_str(db_url)
+        .context("parse db url")?;
+    opts = opts.statement_cache_capacity(0);
+
     let pool = PgPoolOptions::new()
         .max_connections(8)
         .acquire_timeout(Duration::from_secs(5))
-        .connect(db_url)
+        .connect_with(opts)
         .await
         .context("connect supabase pooler")?;
-    info!("postgres pool connected");
+    info!("postgres pool connected (statement_cache disabled for supavisor compat)");
     Ok(pool)
 }
 

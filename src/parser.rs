@@ -114,12 +114,29 @@ fn parse_helius_tx(v: &serde_json::Value) -> Option<Swap> {
 
     let tx = result.pointer("/transaction")?;
     let meta = tx.pointer("/meta")?;
+    let inner_tx = tx.pointer("/transaction")?;
 
+    parse_tx_components(&signature, slot, inner_tx, meta)
+}
+
+/// Pure components-level parser — works on any source that gives us
+/// `(signature, slot, transaction_message_node, meta_node)`. Used both by the
+/// WS path (`parse_helius_tx`) and the enricher (`getTransaction` RPC path).
+/// Codex flagged the previous "synthesized envelope" approach as brittle:
+/// `getTransaction.result.transaction.message` vs `transactionNotification.
+/// params.result.transaction.transaction.message` — different shapes that
+/// happen to coincide when nested correctly. This kills the ambiguity.
+pub fn parse_tx_components(
+    signature: &str,
+    slot: u64,
+    inner_tx: &serde_json::Value,
+    meta: &serde_json::Value,
+) -> Option<Swap> {
     if meta.get("err").is_some_and(|e| !e.is_null()) {
         return None;
     }
 
-    let account_keys_node = tx.pointer("/transaction/message/accountKeys")?;
+    let account_keys_node = inner_tx.pointer("/message/accountKeys")?;
     let account_keys = extract_account_keys(account_keys_node)?;
     if account_keys.is_empty() {
         return None;
@@ -132,14 +149,14 @@ fn parse_helius_tx(v: &serde_json::Value) -> Option<Swap> {
     //   3. Try Orca Whirlpool: programId == WHIRLPOOL, take accounts[2] per IDL.
     //   4. Fall back to heuristic (first non-signer non-program account) if no
     //      recognized DEX instruction matched.
-    let (pool, dex) = extract_pool_and_dex(tx, &account_keys)
+    let (pool, dex) = extract_pool_and_dex(inner_tx, meta, &account_keys)
         .or_else(|| pick_pool_heuristic(&account_keys, &signer).map(|p| (p, "unknown".into())))?;
 
     let fee_lamports = meta
         .get("fee")
         .and_then(|f| f.as_u64())
         .unwrap_or_default();
-    let jito_tip_lamports = extract_jito_tip(tx, &account_keys);
+    let jito_tip_lamports = extract_jito_tip(inner_tx, meta, &account_keys);
     let deltas = compute_signer_deltas(meta, &signer, &account_keys);
 
     let logs = meta
@@ -153,7 +170,7 @@ fn parse_helius_tx(v: &serde_json::Value) -> Option<Swap> {
         .unwrap_or_default();
 
     Some(Swap {
-        signature,
+        signature: signature.to_string(),
         slot,
         signer,
         pool,
@@ -168,17 +185,18 @@ fn parse_helius_tx(v: &serde_json::Value) -> Option<Swap> {
 /// Walk outer + inner instructions; recognize Raydium V4 and Orca Whirlpool swaps;
 /// return (pool_address, dex_name). Caller falls back to a heuristic if this returns None.
 fn extract_pool_and_dex(
-    tx: &serde_json::Value,
+    inner_tx: &serde_json::Value,
+    meta: &serde_json::Value,
     account_keys: &[String],
 ) -> Option<(String, String)> {
-    let outer = tx
-        .pointer("/transaction/message/instructions")
+    let outer = inner_tx
+        .pointer("/message/instructions")
         .and_then(|i| i.as_array());
     if let Some(found) = outer.and_then(|ixs| find_dex_amm_in(ixs, account_keys)) {
         return Some(found);
     }
-    let inner_groups = tx
-        .pointer("/meta/innerInstructions")
+    let inner_groups = meta
+        .get("innerInstructions")
         .and_then(|i| i.as_array())?;
     for group in inner_groups {
         let ixs = group.get("instructions").and_then(|i| i.as_array())?;
@@ -230,19 +248,23 @@ fn find_dex_amm_in(
 
 /// Sum lamports transferred to any Jito tip account across the whole transaction.
 /// Searches both outer and inner instructions; supports `jsonParsed` and raw encodings.
-fn extract_jito_tip(tx: &serde_json::Value, account_keys: &[String]) -> u64 {
+fn extract_jito_tip(
+    inner_tx: &serde_json::Value,
+    meta: &serde_json::Value,
+    account_keys: &[String],
+) -> u64 {
     let mut total = 0_u64;
 
-    if let Some(outer) = tx
-        .pointer("/transaction/message/instructions")
+    if let Some(outer) = inner_tx
+        .pointer("/message/instructions")
         .and_then(|i| i.as_array())
     {
         for ix in outer {
             total = total.saturating_add(jito_tip_from_ix(ix, account_keys));
         }
     }
-    if let Some(groups) = tx
-        .pointer("/meta/innerInstructions")
+    if let Some(groups) = meta
+        .get("innerInstructions")
         .and_then(|i| i.as_array())
     {
         for group in groups {

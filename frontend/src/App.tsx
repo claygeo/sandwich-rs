@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Sidebar } from "./components/Sidebar";
+import { TopNav } from "./components/TopNav";
 import { HeroStatBand } from "./components/HeroStatBand";
 import { FeedTable } from "./components/FeedTable";
 import { LeaderboardTable } from "./components/LeaderboardTable";
@@ -103,34 +103,39 @@ export function App() {
     };
   }, []);
 
-  const topRightStatus = useMemo(() => {
-    if (!stats) return "Mainnet · loading…";
-    return `Mainnet · 24h: ${formatHeroBadge(stats.total_profit_usd ?? 0)}`;
+  const heroBadge = useMemo(() => {
+    if (!stats) return "—";
+    return formatHeroBadge(stats.total_profit_usd ?? 0);
   }, [stats]);
 
   return (
     <div className="app">
-      <Sidebar route={route} onNavigate={navigate} connection={connection} />
-      <main className="main">
-        <div className="top-status">{topRightStatus}</div>
-
+      <TopNav route={route} onNavigate={navigate} connection={connection} />
+      <main className="page">
         {route === "feed" && (
           <>
             <HeroStatBand stats={stats} />
-            <div className="section">
-              <h2 className="section-header">Live feed</h2>
+            <section className="section">
+              <div className="section-head">
+                <h2 className="section-header">Live feed</h2>
+                <span className="section-meta" aria-label="Mainnet 24h badge">
+                  mainnet · 24h {heroBadge}
+                </span>
+              </div>
               <FeedTable rows={rows} />
-            </div>
+            </section>
           </>
         )}
 
         {route === "leaderboard" && (
-          <>
-            <h1 style={{ fontFamily: "var(--font-serif)", fontSize: 32, marginBottom: 24 }}>
-              Top attackers
-            </h1>
+          <section className="section section-page">
+            <h1 className="page-title">Top attackers</h1>
+            <p className="page-sub">
+              Aggregated from the last 24h of detected sandwiches. Rank by total profit
+              extracted in USD (Pyth SOL/USD spot, refreshed every 30s).
+            </p>
             <LeaderboardTable rows={rows} />
-          </>
+          </section>
         )}
 
         {route === "methodology" && <Methodology />}

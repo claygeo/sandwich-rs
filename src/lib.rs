@@ -1,6 +1,7 @@
 pub mod config;
 pub mod db;
 pub mod detector;
+pub mod enricher;
 pub mod http;
 pub mod parser;
 pub mod pyth;

@@ -5,7 +5,7 @@ export function HeroStatBand({ stats }: { stats: Stats24h | null }) {
   if (!stats) {
     return (
       <div className="hero">
-        <h1>sandwich.rs</h1>
+        <h1>extracted by MEV searchers · last 24h</h1>
         <div className="number">$0</div>
         <div className="subtitle">collecting first 24h of data…</div>
       </div>
@@ -20,7 +20,7 @@ export function HeroStatBand({ stats }: { stats: Stats24h | null }) {
 
   return (
     <div className="hero">
-      <h1>sandwich.rs</h1>
+      <h1>extracted by MEV searchers · last 24h</h1>
       <div className="number">{usd}</div>
       <div className="subtitle">
         {count} sandwiches · {stats.unique_attackers} attackers · {stats.unique_victim_pools} pools

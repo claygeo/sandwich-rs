@@ -42,7 +42,7 @@
   --radius-lg: 8px;
   --radius-full: 9999px;
 
-  --sidebar-width: 260px;
+  --topnav-height: 56px;
   --content-max: 1080px;
 }
 
@@ -105,32 +105,38 @@ button {
   color: var(--bg-main);
 }
 
-/* Layout */
+/* Layout — single column, top nav */
 
 .app {
-  display: flex;
   min-height: 100vh;
   background: var(--bg-main);
 }
 
-.sidebar {
-  width: var(--sidebar-width);
-  background: var(--bg-sidebar);
-  border-right: 1px solid var(--border-subtle);
-  padding: var(--space-xl) var(--space-lg);
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
+.topnav {
   position: sticky;
   top: 0;
-  height: 100vh;
+  z-index: 10;
+  background: rgba(38, 38, 36, 0.85);
+  backdrop-filter: saturate(180%) blur(8px);
+  -webkit-backdrop-filter: saturate(180%) blur(8px);
+  border-bottom: 1px solid var(--border-subtle);
+  height: var(--topnav-height);
 }
-
+.topnav-inner {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  height: 100%;
+  padding: 0 var(--space-2xl);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2xl);
+}
 .brand {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-  margin-bottom: var(--space-2xl);
+  text-decoration: none;
+  flex-shrink: 0;
 }
 .brand .mark {
   width: 16px;
@@ -145,15 +151,12 @@ button {
   letter-spacing: -0.01em;
 }
 
-.nav {
+.nav-inline {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  gap: var(--space-xs);
   flex: 1;
 }
-.nav-item {
-  display: flex;
-  align-items: center;
+.nav-inline-item {
   position: relative;
   padding: var(--space-sm) var(--space-md);
   font-size: 13px;
@@ -161,41 +164,32 @@ button {
   color: var(--fg-muted);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  text-decoration: none;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  transition: color 100ms ease;
 }
-.nav-item:hover {
-  background: #1d1c1b;
+.nav-inline-item:hover {
   color: var(--fg);
 }
-.nav-item.active {
-  background: var(--bg-card);
+.nav-inline-item.active {
   color: var(--fg);
 }
-.nav-item.active::before {
+.nav-inline-item.active::after {
   content: "";
   position: absolute;
-  left: -16px;
-  top: 4px;
-  bottom: 4px;
-  width: 2px;
+  left: var(--space-md);
+  right: var(--space-md);
+  bottom: -1px;
+  height: 1px;
   background: var(--accent);
-  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-}
-.nav-section {
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--fg-dim);
-  padding: var(--space-md) var(--space-md) var(--space-xs);
 }
 
-.sidebar-footer {
-  padding-top: var(--space-md);
-  border-top: 1px solid var(--border-subtle);
+.topnav-right {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-md);
+  align-items: center;
+  gap: var(--space-lg);
+  flex-shrink: 0;
 }
 
 .connection-status {
@@ -204,6 +198,7 @@ button {
   gap: var(--space-sm);
   font-size: 12px;
   color: var(--fg-muted);
+  font-family: var(--font-mono);
 }
 .connection-status .dot {
   width: 6px;
@@ -233,57 +228,92 @@ button {
   }
 }
 
-.sidebar-link {
+.github-link {
   font-size: 12px;
+  font-family: var(--font-mono);
   color: var(--fg-muted);
 }
-
-.main {
-  flex: 1;
-  padding: var(--space-3xl) var(--space-3xl);
-  max-width: var(--content-max);
-  margin: 0 auto;
-  width: 100%;
+.github-link:hover {
+  color: var(--accent);
+  text-decoration: none;
 }
 
-.top-status {
-  display: flex;
-  justify-content: flex-end;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--fg-dim);
+.page {
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--space-3xl) var(--space-2xl) var(--space-4xl);
+}
+
+.page-title {
+  font-family: var(--font-serif);
+  font-size: 32px;
+  font-weight: 400;
+  margin-bottom: var(--space-md);
+  letter-spacing: -0.01em;
+}
+.page-sub {
+  font-size: 14px;
+  color: var(--fg-muted);
   margin-bottom: var(--space-2xl);
+  max-width: 60ch;
+}
+
+.section-page {
+  margin-top: var(--space-md);
+}
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--space-lg);
+}
+.section-meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 /* Hero */
 
 .hero {
   margin-bottom: var(--space-3xl);
+  padding-bottom: var(--space-2xl);
+  border-bottom: 1px solid var(--border-subtle);
 }
 .hero h1 {
   font-family: var(--font-serif);
-  font-size: 32px;
+  font-size: 14px;
   font-weight: 400;
+  font-style: italic;
   line-height: 1.2;
   margin-bottom: var(--space-md);
-  color: var(--fg);
+  color: var(--fg-muted);
+  letter-spacing: 0.02em;
 }
 .hero .number {
   font-family: var(--font-serif);
-  font-size: 64px;
+  font-size: 88px;
   font-weight: 400;
-  letter-spacing: -0.025em;
-  line-height: 1.05;
+  letter-spacing: -0.035em;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
   color: var(--fg);
 }
 .hero .subtitle {
   font-size: 14px;
   color: var(--fg-muted);
-  margin-top: var(--space-md);
+  margin-top: var(--space-lg);
 }
 .hero .trend {
   color: var(--accent);
+}
+
+@media (max-width: 768px) {
+  .hero .number {
+    font-size: 48px;
+  }
 }
 
 /* Section */
@@ -457,26 +487,22 @@ button {
 /* Mobile (≤768px) — desktop-first; phones get hero + last 5 */
 
 @media (max-width: 768px) {
-  .app {
-    flex-direction: column;
+  .topnav-inner {
+    padding: 0 var(--space-lg);
+    gap: var(--space-md);
   }
-  .sidebar {
-    width: 100%;
-    height: auto;
-    position: static;
-    border-right: none;
-    border-bottom: 1px solid var(--border-subtle);
-    padding: var(--space-lg);
+  .nav-inline {
+    gap: 0;
   }
-  .nav,
-  .sidebar-footer {
+  .nav-inline-item {
+    padding: var(--space-sm);
+    font-size: 12px;
+  }
+  .topnav-right .github-link {
     display: none;
   }
-  .main {
-    padding: var(--space-xl);
-  }
-  .hero .number {
-    font-size: 40px;
+  .page {
+    padding: var(--space-xl) var(--space-lg) var(--space-3xl);
   }
   .feed-table tbody tr:nth-of-type(n + 6) {
     display: none;
