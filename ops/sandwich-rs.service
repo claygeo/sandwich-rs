@@ -1,0 +1,36 @@
+[Unit]
+Description=sandwich-rs Solana MEV detector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=sandwich
+Group=sandwich
+EnvironmentFile=/etc/sandwich-rs/env
+ExecStart=/opt/sandwich-rs/sandwich-rs
+Restart=on-failure
+RestartSec=5s
+StartLimitIntervalSec=60
+StartLimitBurst=10
+StandardOutput=journal
+StandardError=journal
+LimitNOFILE=65536
+
+# Sandboxing
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/sandwich-rs
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target
