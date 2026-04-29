@@ -79,9 +79,14 @@ struct HermesPriceData {
 }
 
 async fn fetch_price(client: &reqwest::Client) -> Result<f64> {
-    let url = format!("{HERMES_URL}?ids%5B%5D={SOL_USD_FEED_ID}&parsed=true");
+    // Hermes expects each feed id with a 0x prefix; reqwest's .query() handles
+    // the array-style `ids[]=...` encoding for us.
     let res: HermesResponse = client
-        .get(&url)
+        .get(HERMES_URL)
+        .query(&[
+            ("ids[]", format!("0x{SOL_USD_FEED_ID}").as_str()),
+            ("parsed", "true"),
+        ])
         .send()
         .await
         .context("hermes get")?

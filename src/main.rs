@@ -171,7 +171,7 @@ async fn main() -> Result<()> {
                     started_at_epoch,
                 );
                 drop(db_rx);
-                tokio::spawn(async { Ok(()) })
+                spawn_pending()
             }
         }
     } else {
@@ -184,7 +184,7 @@ async fn main() -> Result<()> {
             started_at_epoch,
         );
         drop(db_rx);
-        tokio::spawn(async { Ok(()) })
+        spawn_pending()
     };
 
     info!("all tasks spawned");
@@ -200,6 +200,16 @@ async fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Placeholder task that pends forever, so a missing or failed-to-connect DB
+/// doesn't trip `tokio::select!` in main and shut the whole agent down.
+/// The agent stays up on WS+telegram even when persistence is broken.
+fn spawn_pending() -> tokio::task::JoinHandle<Result<()>> {
+    tokio::spawn(async {
+        std::future::pending::<()>().await;
+        Ok(())
+    })
 }
 
 fn spawn_stats_refresher(pool: sqlx::PgPool) {

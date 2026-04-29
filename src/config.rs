@@ -22,14 +22,24 @@ impl Config {
     pub fn from_env() -> anyhow::Result<Self> {
         let helius_key = env::var("HELIUS_API_KEY").ok().filter(|s| !s.is_empty());
         let explicit_ws = env::var("SANDWICH_WS_URL").ok().filter(|s| !s.is_empty());
+        // Atlas (transactionSubscribe with parsed inner ix) is on Helius's paid tier.
+        // Free tier gets standard WS at mainnet.helius-rpc.com with logsSubscribe.
+        // Default OFF to keep free-tier operators running without 403 retry loops.
+        let want_atlas = env::var("SANDWICH_USE_ATLAS")
+            .map(|v| matches!(v.to_lowercase().as_str(), "true" | "1" | "yes"))
+            .unwrap_or(false);
 
-        let (ws_url, use_helius) = match (explicit_ws, helius_key) {
-            (Some(url), _) => (url, false),
-            (None, Some(key)) => (
+        let (ws_url, use_helius) = match (explicit_ws, helius_key, want_atlas) {
+            (Some(url), _, _) => (url, false),
+            (None, Some(key), true) => (
                 format!("wss://atlas-mainnet.helius-rpc.com/?api-key={key}"),
                 true,
             ),
-            (None, None) => (SOLANA_MAINNET_WS.to_string(), false),
+            (None, Some(key), false) => (
+                format!("wss://mainnet.helius-rpc.com/?api-key={key}"),
+                false,
+            ),
+            (None, None, _) => (SOLANA_MAINNET_WS.to_string(), false),
         };
 
         let watched_programs = env::var("WATCHED_PROGRAMS")
