@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
@@ -89,7 +89,13 @@ async fn main() -> Result<()> {
                     }
                 }
             });
-            ws::run(cfg_ws.ws_url, cfg_ws.watched_programs, cfg_ws.use_helius, probe_tx).await
+            ws::run(
+                cfg_ws.ws_url,
+                cfg_ws.watched_programs,
+                cfg_ws.use_helius,
+                probe_tx,
+            )
+            .await
         })
     };
 
@@ -104,12 +110,18 @@ async fn main() -> Result<()> {
         tokio::spawn(async move {
             let mut rx = parsed_swap_rx;
             while let Some(swap) = rx.recv().await {
-                slot_marker.record(swap.slot);
+                // Record the slot only AFTER the swap is accepted downstream.
+                // Recording before the try_send advanced the durable resume
+                // marker past events that the very next line then dropped on a
+                // full channel, so a restart resumed from a slot whose swaps
+                // were never processed. The mark must never run ahead of work
+                // that was actually handed off.
+                let slot = swap.slot;
                 match swap_raw_tx.try_send(swap) {
-                    Ok(()) => {}
+                    Ok(()) => slot_marker.record(slot),
                     Err(tokio::sync::mpsc::error::TrySendError::Full(s)) => {
                         let n = dropped.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
-                        warn!(sig = %s.signature, dropped_input_total = n, "enricher input full — dropping (parser stays unblocked)");
+                        warn!(sig = %s.signature, slot, dropped_input_total = n, "enricher input full — dropping (parser stays unblocked); slot marker NOT advanced");
                     }
                     Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => break,
                 }
@@ -137,9 +149,19 @@ async fn main() -> Result<()> {
                 let q = m.quota_dropped.load(std::sync::atomic::Ordering::Relaxed);
                 let r4 = m.rate_limit_429.load(std::sync::atomic::Ordering::Relaxed);
                 let nr = m.null_retries.load(std::sync::atomic::Ordering::Relaxed);
-                let dr = m.dropped_after_retry.load(std::sync::atomic::Ordering::Relaxed);
+                let dr = m
+                    .dropped_after_retry
+                    .load(std::sync::atomic::Ordering::Relaxed);
                 let ok = m.enriched_ok.load(std::sync::atomic::Ordering::Relaxed);
-                info!(enriched_ok=ok, input_dropped=inp, quota_dropped=q, rate_limit_429=r4, null_retries=nr, dropped_after_retry=dr, "enricher metrics");
+                info!(
+                    enriched_ok = ok,
+                    input_dropped = inp,
+                    quota_dropped = q,
+                    rate_limit_429 = r4,
+                    null_retries = nr,
+                    dropped_after_retry = dr,
+                    "enricher metrics"
+                );
             }
         });
     }
