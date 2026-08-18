@@ -360,10 +360,9 @@ fn extract_account_keys(node: &serde_json::Value) -> Option<Vec<String>> {
     for k in arr {
         if let Some(s) = k.as_str() {
             out.push(s.to_string());
-        } else if let Some(s) = k.get("pubkey").and_then(|p| p.as_str()) {
-            out.push(s.to_string());
         } else {
-            return None;
+            let s = k.get("pubkey").and_then(|p| p.as_str())?;
+            out.push(s.to_string());
         }
     }
     Some(out)
