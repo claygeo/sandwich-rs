@@ -108,11 +108,7 @@ pub fn run_with_metrics(
     tokio::spawn(run_inner(rpc_url, metrics, rx, tx))
 }
 
-pub async fn run(
-    rpc_url: String,
-    rx: mpsc::Receiver<Swap>,
-    tx: mpsc::Sender<Swap>,
-) -> Result<()> {
+pub async fn run(rpc_url: String, rx: mpsc::Receiver<Swap>, tx: mpsc::Sender<Swap>) -> Result<()> {
     run_inner(rpc_url, Arc::new(EnrichMetrics::default()), rx, tx).await
 }
 
@@ -165,9 +161,7 @@ async fn run_inner(
                     let _ = tx.send(enriched).await;
                 }
                 Ok(None) => {
-                    metrics
-                        .dropped_after_retry
-                        .fetch_add(1, Ordering::Relaxed);
+                    metrics.dropped_after_retry.fetch_add(1, Ordering::Relaxed);
                 }
                 Err(e) => {
                     warn!(sig = %swap.signature, err = %e, "enrich failed");
@@ -234,12 +228,7 @@ async fn enrich_one(client: &EnrichClient, raw: &Swap) -> Result<EnrichResult> {
             "commitment": "confirmed"
         }]
     });
-    let resp = client
-        .http
-        .post(&client.rpc_url)
-        .json(&body)
-        .send()
-        .await?;
+    let resp = client.http.post(&client.rpc_url).json(&body).send().await?;
 
     if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
         return Ok(EnrichResult::RateLimited);

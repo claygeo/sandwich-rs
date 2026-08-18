@@ -162,8 +162,12 @@ async fn run(input: &str, output: &str, rpc_url: &str) -> Result<(usize, usize)>
 }
 
 async fn resolve(client: &reqwest::Client, rpc_url: &str, r: &SeedRow) -> Result<OutRow> {
-    let front = get_tx(client, rpc_url, &r.front_sig).await.context("front")?;
-    let victim = get_tx(client, rpc_url, &r.victim_sig).await.context("victim")?;
+    let front = get_tx(client, rpc_url, &r.front_sig)
+        .await
+        .context("front")?;
+    let victim = get_tx(client, rpc_url, &r.victim_sig)
+        .await
+        .context("victim")?;
     let back = get_tx(client, rpc_url, &r.back_sig).await.context("back")?;
 
     let front_signer = signer_of(&front).context("front signer")?;
@@ -185,8 +189,7 @@ async fn resolve(client: &reqwest::Client, rpc_url: &str, r: &SeedRow) -> Result
 
     let front_wsol = wsol_delta(&front, &front_signer);
     let back_wsol = wsol_delta(&back, &back_signer);
-    let profit_lamports =
-        front_wsol + back_wsol - front.meta.fee as i128 - back.meta.fee as i128;
+    let profit_lamports = front_wsol + back_wsol - front.meta.fee as i128 - back.meta.fee as i128;
     let profit_sol = profit_lamports as f64 / 1_000_000_000.0;
 
     Ok(OutRow {
@@ -304,11 +307,7 @@ fn wsol_delta(tx: &GetTransactionResult, owner: &str) -> i128 {
         if owner_str != owner {
             return None;
         }
-        let amt: i128 = b
-            .pointer("/uiTokenAmount/amount")?
-            .as_str()?
-            .parse()
-            .ok()?;
+        let amt: i128 = b.pointer("/uiTokenAmount/amount")?.as_str()?.parse().ok()?;
         Some((mint, amt))
     };
     let pre_amt: i128 = tx

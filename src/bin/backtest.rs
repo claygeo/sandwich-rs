@@ -56,7 +56,9 @@ async fn main() -> ExitCode {
                 println!("\nSHIP GATE: PASS\n");
                 ExitCode::SUCCESS
             } else {
-                println!("\nSHIP GATE: FAIL  (need precision ≥0.70, recall ≥0.50, n_positive ≥30)\n");
+                println!(
+                    "\nSHIP GATE: FAIL  (need precision ≥0.70, recall ≥0.50, n_positive ≥30)\n"
+                );
                 ExitCode::from(1)
             }
         }
@@ -91,7 +93,10 @@ async fn run(path: &str) -> Result<Report> {
             "positive" | "pos" | "true" | "1" => positives.push(r),
             "negative" | "neg" | "false" | "0" => negatives.push(r),
             other => {
-                eprintln!("warn: unknown case_type {other:?} on victim_sig={}", r.victim_sig);
+                eprintln!(
+                    "warn: unknown case_type {other:?} on victim_sig={}",
+                    r.victim_sig
+                );
             }
         }
     }
@@ -202,10 +207,7 @@ async fn detect_one(row: &Row) -> Result<Option<Sandwich>> {
             dex: "raydium-v4".into(),
             fee_lamports: 0,
             jito_tip_lamports: 0,
-            deltas: vec![
-                delta(WSOL_MINT, front_wsol),
-                delta(&token_mint, 500_000),
-            ],
+            deltas: vec![delta(WSOL_MINT, front_wsol), delta(&token_mint, 500_000)],
             raw_logs: vec![],
         })
         .await?;
@@ -234,10 +236,7 @@ async fn detect_one(row: &Row) -> Result<Option<Sandwich>> {
             dex: "raydium-v4".into(),
             fee_lamports: 0,
             jito_tip_lamports: 0,
-            deltas: vec![
-                delta(WSOL_MINT, back_wsol),
-                delta(&token_mint, -500_000),
-            ],
+            deltas: vec![delta(WSOL_MINT, back_wsol), delta(&token_mint, -500_000)],
             raw_logs: vec![],
         })
         .await?;
@@ -279,7 +278,11 @@ impl std::fmt::Display for Report {
         writeln!(f, "===== sandwich-rs BACKTEST =====")?;
         writeln!(f, "positives:  {}", self.n_positive)?;
         writeln!(f, "negatives:  {}", self.n_negative)?;
-        writeln!(f, "TP / FP / FN / TN: {} / {} / {} / {}", self.tp, self.fp, self.fn_, self.tn)?;
+        writeln!(
+            f,
+            "TP / FP / FN / TN: {} / {} / {} / {}",
+            self.tp, self.fp, self.fn_, self.tn
+        )?;
         writeln!(f, "precision:  {:.3}", self.precision)?;
         writeln!(f, "recall:     {:.3}", self.recall)?;
         writeln!(f, "F1:         {:.3}", self.f1)?;

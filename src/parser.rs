@@ -152,10 +152,7 @@ pub fn parse_tx_components(
     let (pool, dex) = extract_pool_and_dex(inner_tx, meta, &account_keys)
         .or_else(|| pick_pool_heuristic(&account_keys, &signer).map(|p| (p, "unknown".into())))?;
 
-    let fee_lamports = meta
-        .get("fee")
-        .and_then(|f| f.as_u64())
-        .unwrap_or_default();
+    let fee_lamports = meta.get("fee").and_then(|f| f.as_u64()).unwrap_or_default();
     let jito_tip_lamports = extract_jito_tip(inner_tx, meta, &account_keys);
     let deltas = compute_signer_deltas(meta, &signer, &account_keys);
 
@@ -195,9 +192,7 @@ fn extract_pool_and_dex(
     if let Some(found) = outer.and_then(|ixs| find_dex_amm_in(ixs, account_keys)) {
         return Some(found);
     }
-    let inner_groups = meta
-        .get("innerInstructions")
-        .and_then(|i| i.as_array())?;
+    let inner_groups = meta.get("innerInstructions").and_then(|i| i.as_array())?;
     for group in inner_groups {
         let ixs = group.get("instructions").and_then(|i| i.as_array())?;
         if let Some(found) = find_dex_amm_in(ixs, account_keys) {
@@ -207,10 +202,7 @@ fn extract_pool_and_dex(
     None
 }
 
-fn find_dex_amm_in(
-    ixs: &[serde_json::Value],
-    account_keys: &[String],
-) -> Option<(String, String)> {
+fn find_dex_amm_in(ixs: &[serde_json::Value], account_keys: &[String]) -> Option<(String, String)> {
     for ix in ixs {
         let program_id = match ix.get("programId").and_then(|p| p.as_str()) {
             Some(s) => s.to_string(),
@@ -263,10 +255,7 @@ fn extract_jito_tip(
             total = total.saturating_add(jito_tip_from_ix(ix, account_keys));
         }
     }
-    if let Some(groups) = meta
-        .get("innerInstructions")
-        .and_then(|i| i.as_array())
-    {
+    if let Some(groups) = meta.get("innerInstructions").and_then(|i| i.as_array()) {
         for group in groups {
             if let Some(ixs) = group.get("instructions").and_then(|i| i.as_array()) {
                 for ix in ixs {
@@ -340,10 +329,7 @@ fn parse_logs(v: &serde_json::Value) -> Option<Swap> {
     if value.get("err").is_some_and(|e| !e.is_null()) {
         return None;
     }
-    let signature = value
-        .get("signature")
-        .and_then(|s| s.as_str())?
-        .to_string();
+    let signature = value.get("signature").and_then(|s| s.as_str())?.to_string();
     let slot = context.get("slot").and_then(|s| s.as_u64())?;
     let logs = value
         .get("logs")
@@ -413,7 +399,7 @@ fn is_known_program(addr: &str) -> bool {
             | "srmqPvymJeFKQ4zGQed1GFppgkRHL9kaELCbyksJtPX"    // Serum legacy
             | "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4"    // Jupiter v6
             | "JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB"    // Jupiter v4
-            | "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc"    // Orca Whirlpool
+            | "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc" // Orca Whirlpool
     )
 }
 

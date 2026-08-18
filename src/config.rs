@@ -49,9 +49,7 @@ impl Config {
             .ok()
             .filter(|s| !s.is_empty())
             .map(|s| s.split(',').map(|p| p.trim().to_string()).collect())
-            .unwrap_or_else(|| {
-                vec![RAYDIUM_AMM_V4.to_string(), ORCA_WHIRLPOOL.to_string()]
-            });
+            .unwrap_or_else(|| vec![RAYDIUM_AMM_V4.to_string(), ORCA_WHIRLPOOL.to_string()]);
 
         let db_url = env::var("SUPABASE_POOLER_URL")
             .ok()
@@ -66,12 +64,15 @@ impl Config {
             .map(|v| v.to_lowercase() != "off" && v != "0")
             .unwrap_or(true);
 
-        let rpc_url = env::var("SANDWICH_RPC_URL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| {
-            match env::var("HELIUS_API_KEY").ok().filter(|s| !s.is_empty()) {
-                Some(k) => format!("https://mainnet.helius-rpc.com/?api-key={k}"),
-                None => "https://api.mainnet-beta.solana.com".into(),
-            }
-        });
+        let rpc_url = env::var("SANDWICH_RPC_URL")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(
+                || match env::var("HELIUS_API_KEY").ok().filter(|s| !s.is_empty()) {
+                    Some(k) => format!("https://mainnet.helius-rpc.com/?api-key={k}"),
+                    None => "https://api.mainnet-beta.solana.com".into(),
+                },
+            );
 
         Ok(Self {
             ws_url,
@@ -82,7 +83,9 @@ impl Config {
             state_dir,
             enable_pyth,
             rpc_url,
-            telegram_bot_token: env::var("TELEGRAM_BOT_TOKEN").ok().filter(|s| !s.is_empty()),
+            telegram_bot_token: env::var("TELEGRAM_BOT_TOKEN")
+                .ok()
+                .filter(|s| !s.is_empty()),
             telegram_chat_id: env::var("TELEGRAM_CHAT_ID").ok().filter(|s| !s.is_empty()),
         })
     }

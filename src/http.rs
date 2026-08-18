@@ -1,6 +1,6 @@
 use std::convert::Infallible;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::Arc;
 
 use axum::{
     extract::State,
@@ -74,9 +74,7 @@ async fn healthz(State(s): State<AppState>) -> (StatusCode, Json<HealthResp>) {
     )
 }
 
-async fn events(
-    State(s): State<AppState>,
-) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+async fn events(State(s): State<AppState>) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let rx = s.broadcaster.subscribe();
     let pool = s.pool.clone();
     let stream = async_stream::stream! {

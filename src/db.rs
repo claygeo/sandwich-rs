@@ -20,8 +20,7 @@ pub async fn connect(db_url: &str) -> Result<PgPool> {
     // cache forces sqlx to re-prepare per query — a touch more wire work but
     // pooler-safe.
     use std::str::FromStr;
-    let mut opts = sqlx::postgres::PgConnectOptions::from_str(db_url)
-        .context("parse db url")?;
+    let mut opts = sqlx::postgres::PgConnectOptions::from_str(db_url).context("parse db url")?;
     opts = opts.statement_cache_capacity(0);
 
     let pool = PgPoolOptions::new()

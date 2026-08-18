@@ -99,10 +99,7 @@ pub async fn run(
 
 /// Returns every (front, victim_i, back) triple that satisfies the sandwich pattern.
 /// Multi-victim brackets and back-to-back attacker sequences both produce multiple rows.
-fn try_detect_sandwiches(
-    candidate_back: &Swap,
-    ring: &VecDeque<(Instant, Swap)>,
-) -> Vec<Sandwich> {
+fn try_detect_sandwiches(candidate_back: &Swap, ring: &VecDeque<(Instant, Swap)>) -> Vec<Sandwich> {
     let attacker = &candidate_back.signer;
     let mut out = Vec::new();
 
@@ -261,9 +258,27 @@ mod tests {
     #[tokio::test]
     async fn detects_classic_sandwich() {
         let out = drive(vec![
-            mk_swap("front", 100, ATTACKER, POOL, vec![delta(WSOL_MINT, -1_000_000_000), delta(TOKEN, 500_000)]),
-            mk_swap("victim", 101, VICTIM, POOL, vec![delta(WSOL_MINT, -2_000_000_000), delta(TOKEN, 800_000)]),
-            mk_swap("back", 102, ATTACKER, POOL, vec![delta(WSOL_MINT, 1_200_000_000), delta(TOKEN, -500_000)]),
+            mk_swap(
+                "front",
+                100,
+                ATTACKER,
+                POOL,
+                vec![delta(WSOL_MINT, -1_000_000_000), delta(TOKEN, 500_000)],
+            ),
+            mk_swap(
+                "victim",
+                101,
+                VICTIM,
+                POOL,
+                vec![delta(WSOL_MINT, -2_000_000_000), delta(TOKEN, 800_000)],
+            ),
+            mk_swap(
+                "back",
+                102,
+                ATTACKER,
+                POOL,
+                vec![delta(WSOL_MINT, 1_200_000_000), delta(TOKEN, -500_000)],
+            ),
         ])
         .await;
         assert_eq!(out.len(), 1);
@@ -275,7 +290,11 @@ mod tests {
         assert_eq!(s.back.signature, "back");
         assert_eq!(s.slot_span, 2);
         assert_eq!(s.profit_lamports, Some(200_000_000));
-        assert!(s.confidence >= 80, "should hit ≥80 confidence (got {})", s.confidence);
+        assert!(
+            s.confidence >= 80,
+            "should hit ≥80 confidence (got {})",
+            s.confidence
+        );
     }
 
     #[tokio::test]
@@ -351,10 +370,34 @@ mod tests {
         // Codex #5: A → V1 → V2 → B should produce two Sandwich rows.
         let v2 = "Victim2222222222222222222222222222222222222";
         let out = drive(vec![
-            mk_swap("front", 100, ATTACKER, POOL, vec![delta(WSOL_MINT, -1_000_000_000), delta("T", 500_000)]),
-            mk_swap("victim1", 101, VICTIM, POOL, vec![delta(WSOL_MINT, -500_000_000), delta("T", 200_000)]),
-            mk_swap("victim2", 101, v2, POOL, vec![delta(WSOL_MINT, -700_000_000), delta("T", 280_000)]),
-            mk_swap("back", 102, ATTACKER, POOL, vec![delta(WSOL_MINT, 1_500_000_000), delta("T", -500_000)]),
+            mk_swap(
+                "front",
+                100,
+                ATTACKER,
+                POOL,
+                vec![delta(WSOL_MINT, -1_000_000_000), delta("T", 500_000)],
+            ),
+            mk_swap(
+                "victim1",
+                101,
+                VICTIM,
+                POOL,
+                vec![delta(WSOL_MINT, -500_000_000), delta("T", 200_000)],
+            ),
+            mk_swap(
+                "victim2",
+                101,
+                v2,
+                POOL,
+                vec![delta(WSOL_MINT, -700_000_000), delta("T", 280_000)],
+            ),
+            mk_swap(
+                "back",
+                102,
+                ATTACKER,
+                POOL,
+                vec![delta(WSOL_MINT, 1_500_000_000), delta("T", -500_000)],
+            ),
         ])
         .await;
         assert_eq!(out.len(), 2, "two victims => two sandwich rows");
@@ -371,13 +414,35 @@ mod tests {
     #[tokio::test]
     async fn profit_subtracts_fees() {
         // Codex #1: profit = (-1B + 1.2B) - (front_fee + back_fee) = 200M - 50M - 50M = 100M lamports
-        let mut front = mk_swap("front", 100, ATTACKER, POOL, vec![delta(WSOL_MINT, -1_000_000_000), delta("T", 500_000)]);
+        let mut front = mk_swap(
+            "front",
+            100,
+            ATTACKER,
+            POOL,
+            vec![delta(WSOL_MINT, -1_000_000_000), delta("T", 500_000)],
+        );
         front.fee_lamports = 50_000_000;
-        let victim = mk_swap("victim", 101, VICTIM, POOL, vec![delta(WSOL_MINT, -2_000_000_000), delta("T", 800_000)]);
-        let mut back = mk_swap("back", 102, ATTACKER, POOL, vec![delta(WSOL_MINT, 1_200_000_000), delta("T", -500_000)]);
+        let victim = mk_swap(
+            "victim",
+            101,
+            VICTIM,
+            POOL,
+            vec![delta(WSOL_MINT, -2_000_000_000), delta("T", 800_000)],
+        );
+        let mut back = mk_swap(
+            "back",
+            102,
+            ATTACKER,
+            POOL,
+            vec![delta(WSOL_MINT, 1_200_000_000), delta("T", -500_000)],
+        );
         back.fee_lamports = 50_000_000;
         let out = drive(vec![front, victim, back]).await;
         assert_eq!(out.len(), 1);
-        assert_eq!(out[0].profit_lamports, Some(100_000_000), "profit must net out fees");
+        assert_eq!(
+            out[0].profit_lamports,
+            Some(100_000_000),
+            "profit must net out fees"
+        );
     }
 }
